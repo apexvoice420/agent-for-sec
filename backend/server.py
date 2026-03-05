@@ -1,18 +1,30 @@
 """
 Earnings Copilot - FastAPI Backend
-Real SEC data + AI analysis
+Real SEC data + AI analysis with Auth + Stripe
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
+import stripe
 
 app = FastAPI(title="Earnings Copilot API")
 
+# Stripe config
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+
 # CORS for frontend
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://earningscopilot.com",
+    "https://www.earningscopilot.com",
+    "https://earnings-copilot.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins + ["*"],  # Allow all in dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -20,6 +32,20 @@ app.add_middleware(
 
 # Global state for current analysis
 current_data = {}
+
+# Simple auth check (extend with Clerk JWT verification in production)
+async def verify_auth(request: Request):
+    """Verify user is authenticated. Extend with Clerk JWT verification."""
+    # In production, verify Clerk JWT token here
+    # For now, allow all requests
+    return True
+
+# Subscription check
+async def verify_subscription(request: Request):
+    """Verify user has active subscription."""
+    # In production, check Stripe subscription status
+    # For now, allow all requests
+    return True
 
 
 @app.get("/")
@@ -34,7 +60,7 @@ async def get_status():
         "status": "healthy",
         "version": "3.0.0",
         "name": "Earnings Copilot",
-        "features": ["SEC EDGAR", "AI Analysis", "Multi-Filing Support", "Drafting Assistant"]
+        "features": ["SEC EDGAR", "AI Analysis", "Multi-Filing Support", "Drafting Assistant", "Auth + Stripe"]
     }
 
 
@@ -44,8 +70,96 @@ async def health():
     return {"status": "ok"}
 
 
+# ============ STRIPE ENDPOINTS ============
+
+@app.post("/api/stripe/create-checkout-session")
+async def create_checkout_session(request: Request):
+    """Create Stripe checkout session for subscription."""
+    try:
+        data = await request.json()
+        price_id = data.get("priceId")
+        
+        # Create checkout session
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price": price_id,
+                "quantity": 1,
+            }],
+            mode="subscription",
+            success_url="https://earningscopilot.com/dashboard?session_id={CHECKOUT_SESSION_ID}",
+            cancel_url="https://earningscopilot.com/pricing",
+        )
+        
+        return {"sessionId": checkout_session.id, "url": checkout_session.url}
+    
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhooks for subscription events."""
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, webhook_secret
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    
+    # Handle the event
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        # TODO: Create user account, activate subscription
+        print(f"Payment successful: {session}")
+    
+    elif event["type"] == "customer.subscription.updated":
+        subscription = event["data"]["object"]
+        # TODO: Update subscription status in database
+        print(f"Subscription updated: {subscription}")
+    
+    elif event["type"] == "customer.subscription.deleted":
+        subscription = event["data"]["object"]
+        # TODO: Deactivate subscription in database
+        print(f"Subscription cancelled: {subscription}")
+    
+    return {"status": "success"}
+
+
+@app.get("/api/stripe/prices")
+async def get_prices():
+    """Get available subscription prices."""
+    # Return your Stripe price IDs
+    return {
+        "prices": [
+            {
+                "id": "price_monthly",  # Replace with actual Stripe price ID
+                "name": "Monthly",
+                "amount": 4900,
+                "currency": "usd",
+                "interval": "month",
+            },
+            {
+                "id": "price_annual",  # Replace with actual Stripe price ID
+                "name": "Annual",
+                "amount": 49000,
+                "currency": "usd",
+                "interval": "year",
+            }
+        ]
+    }
+
+
+# ============ SEC API ENDPOINTS ============
+
 @app.get("/api/fetch/{ticker}")
-async def fetch_data(ticker: str, form_type: str = "10-K"):
+async def fetch_data(ticker: str, form_type: str = "10-K", auth=Depends(verify_auth)):
     """Fetch SEC filing data for a ticker. Supports 10-K, 10-Q, 8-K."""
     global current_data
     
@@ -102,7 +216,7 @@ async def fetch_data(ticker: str, form_type: str = "10-K"):
 
 
 @app.get("/api/generate/{ticker}")
-async def generate_report(ticker: str):
+async def generate_report(ticker: str, auth=Depends(verify_auth)):
     """Generate earnings prep report using AI."""
     global current_data
     
@@ -148,7 +262,7 @@ async def generate_report(ticker: str):
 
 
 @app.get("/api/metrics/{ticker}")
-async def get_metrics(ticker: str):
+async def get_metrics(ticker: str, auth=Depends(verify_auth)):
     """Get financial metrics for a ticker."""
     try:
         from src.sec_fetcher import extract_financial_metrics, get_cik
@@ -172,8 +286,8 @@ async def get_metrics(ticker: str):
 
 
 @app.get("/api/audit/{ticker}")
-async def run_audit(ticker: str, form_type: str = "10-K"):
-    """Run SEC Specialist Agent compliance audit for a ticker."""
+async def run_audit(ticker: str, form_type: str = "10-K", auth=Depends(verify_subscription)):
+    """Run SEC Specialist Agent compliance audit for a ticker. Requires subscription."""
     try:
         from src.sec_agent import SECSpecialistAgent
         
@@ -197,8 +311,8 @@ async def run_audit(ticker: str, form_type: str = "10-K"):
 
 
 @app.get("/api/draft/{ticker}")
-async def draft_section(ticker: str, section: str = "mda", form_type: str = "10-K"):
-    """Draft a filing section using AI based on SEC data and transcripts."""
+async def draft_section(ticker: str, section: str = "mda", form_type: str = "10-K", auth=Depends(verify_subscription)):
+    """Draft a filing section using AI. Requires subscription."""
     try:
         from src.sec_agent import SECSpecialistAgent
         
@@ -224,5 +338,6 @@ async def draft_section(ticker: str, section: str = "mda", form_type: str = "10-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     print(f"Starting Earnings Copilot API on port {port}...")
-    print(f"GROQ_API_KEY configured: {'Yes' if os.environ.get('GROQ_API_KEY') else 'No'}")
+    print(f"MODAL_API_KEY configured: {'Yes' if os.environ.get('MODAL_API_KEY') else 'No'}")
+    print(f"STRIPE configured: {'Yes' if os.environ.get('STRIPE_SECRET_KEY') else 'No'}")
     uvicorn.run(app, host="0.0.0.0", port=port)

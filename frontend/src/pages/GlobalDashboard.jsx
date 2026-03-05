@@ -11,8 +11,9 @@ import {
     AlertCircle,
     CheckCircle,
     Clock,
-    UserButton
+    User
 } from 'lucide-react';
+import { UserButton } from '@clerk/clerk-react';
 import FilingCard from '../components/FilingCard';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://earnings-copilot-api.up.railway.app';
