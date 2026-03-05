@@ -1,0 +1,9 @@
+name: "10-Q Quarterly Update"
+description: "Drafts the 10-Q MD&A section by focusing on YoY changes and transcript drivers."
+steps:
+  - name: "Fetch Quarterly Data"
+    prompt: "Retrieve the latest 10-Q filing and most recent earnings transcript for {{ticker}}."
+  - name: "Analyze Drivers"
+    prompt: "Identify the top 3 drivers of revenue and margin performance mentioned in the {{latest_transcript}}."
+  - name: "Draft MD&A"
+    prompt: "Draft the Item 2. Management's Discussion and Analysis section using the synthesis protocol."

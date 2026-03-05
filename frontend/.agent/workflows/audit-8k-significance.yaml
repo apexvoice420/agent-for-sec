@@ -1,0 +1,7 @@
+name: "8-K Materiality Audit"
+description: "Evaluates external news or events against SEC Form 8-K reporting requirements."
+steps:
+  - name: "Assess Materiality"
+    prompt: "Evaluate the event: {{event_description}}. Does this constitute a material event under Form 8-K Item 1.01 or 2.01?"
+  - name: "Generate Summary"
+    prompt: "Draft a concise 8-K Item explanation for the identified event, ensuring a formal Wall Street tone."

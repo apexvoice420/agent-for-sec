@@ -1,0 +1,12 @@
+name: "SEC Filing Drafting"
+description: "Drafts specific sections (MD&A, Risk Factors, Business) for 10-K, 10-Q, or 8-K filings based on recent earnings call transcripts."
+steps:
+  - name: "Data Aggregation"
+    prompt: "Gather latest financial metrics and earnings transcript for {{ticker}}."
+  - name: "MD&A Generation"
+    prompt: "Draft the Item 7 (MD&A) section for the {{form_type}}. Use drivers from the transcript to explain performance."
+    // turbo: true
+  - name: "Risk Assessment Update"
+    prompt: "Compare {{last_filing}} with recent macro events. Draft updated Risk Factors (Item 1A)."
+  - name: "Final Polish"
+    prompt: "Apply Wall Street objective tone and ensure SEC compliance (no puffery)."
