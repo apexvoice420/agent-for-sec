@@ -1,0 +1,12 @@
+[project]
+name = "earnings-pilot"
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python server.py"
+healthcheckPath = "/health"
+healthcheckTimeout = 600
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

@@ -1,0 +1,47 @@
+name: "Draft 10-K Section"
+description: "Sequential workflow for drafting a professional 10-K section with transcript synthesis."
+steps:
+  - name: "Fetch Historical Context"
+    action: "fetch_previous_filing"
+    params:
+      form_type: "10-K"
+      section: "{{section}}"
+    notes: "Retrieve the same section from prior year's filing for delta comparison."
+  
+  - name: "Extract Transcript Drivers"
+    action: "analyze_transcript"
+    params:
+      focus: "management_commentary"
+      extract:
+        - "revenue_drivers"
+        - "margin_commentary"
+        - "strategic_priorities"
+        - "forward_guidance"
+    notes: "Identify the 'Why' behind the numbers from the earnings call."
+  
+  - name: "Synthesize Draft"
+    action: "generate_draft"
+    params:
+      section: "{{section}}"
+      tone: "wall_street_objective"
+      requirements:
+        - "Explain drivers, not just numbers"
+        - "Align with CEO's top 3 priorities"
+        - "Remove promotional puffery"
+        - "Include YoY variance analysis"
+    notes: "Generate the formal SEC language draft."
+  
+  - name: "Compliance Check"
+    action: "audit_draft"
+    params:
+      checks:
+        - "puffery_detection"
+        - "regulation_sk_compliance"
+        - "consistency_with_transcript"
+    notes: "Flag any language that could trigger SEC comment letters."
+  
+  - name: "Final Output"
+    action: "format_output"
+    params:
+      format: "markdown"
+      include_disclaimer: true
